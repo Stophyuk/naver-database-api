@@ -1,0 +1,29 @@
+{
+  "name": "naver-database-api",
+  "version": "0.1.0",
+  "description": "네이버 데이터랩 전체 API 수집/분석 서버",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "collect": "tsx src/collect.ts",
+    "collect:search": "tsx src/collectors/search-trend.ts",
+    "collect:shopping": "tsx src/collectors/shopping-insight.ts",
+    "db:init": "tsx src/db/init.ts",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "croner": "^9.0.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/express": "^4.17.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
