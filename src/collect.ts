@@ -86,8 +86,9 @@ async function runCollection() {
   console.log("\n📊 네이버 검색결과수 수집");
   await logCollection("naver-search-volume", collectNaverSearchVolume);
 
-  console.log("\n🌐 Google CSE 수집");
-  await logCollection("google-search", collectGoogleSearch);
+  // Google CSE — 비활성화 (403 이슈, 나중에 해결 후 활성화)
+  // console.log("\n🌐 Google CSE 수집");
+  // await logCollection("google-search", collectGoogleSearch);
 
   console.log("\n✅ 전체 수집 완료:", new Date().toISOString());
 }
