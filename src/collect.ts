@@ -12,6 +12,13 @@ interface CollectorResult {
   rowsInserted: number;
 }
 
+function withTimeout<T>(fn: () => Promise<T>, ms: number, label: string): () => Promise<T> {
+  return () => Promise.race([
+    fn(),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} 타임아웃 (${ms/1000}초)`)), ms))
+  ]);
+}
+
 async function logCollection(
   jobType: string,
   fn: () => Promise<CollectorResult>
@@ -83,17 +90,17 @@ async function runCollection() {
   console.log("\n📡 Signal.bz 실시간 수집");
   await logCollection("signal-realtime", collectSignalRealtime);
 
-  // 검색광고: 전체 키워드 포함 (배치 5개씩이라 효율적)
+  // 검색광고: 전체 키워드 (5분 타임아웃)
   console.log(`\n🔍 SearchAd 키워드 통계 수집 (전체 ${allKeywords.length}개 그룹)`);
-  await logCollection("naver-searchad", collectNaverSearchAd);
+  await logCollection("naver-searchad", withTimeout(collectNaverSearchAd, 300000, "SearchAd"));
 
-  // 자동완성: 전체 키워드
+  // 자동완성: 전체 키워드 (10분 타임아웃)
   console.log(`\n💡 네이버 자동완성 수집 (전체 ${allKeywords.length}개 그룹)`);
-  await logCollection("naver-suggest", collectNaverSuggest);
+  await logCollection("naver-suggest", withTimeout(collectNaverSuggest, 600000, "Suggest"));
 
-  // 검색결과수: 전체 키워드
+  // 검색결과수: 전체 키워드 (30분 타임아웃)
   console.log(`\n📊 네이버 검색결과수 수집 (전체 ${allKeywords.length}개 그룹)`);
-  await logCollection("naver-search-volume", collectNaverSearchVolume);
+  await logCollection("naver-search-volume", withTimeout(collectNaverSearchVolume, 1800000, "SearchVolume"));
 
   // Google CSE — 비활성화 (403 이슈, 나중에 해결 후 활성화)
   // console.log("\n🌐 Google CSE 수집");

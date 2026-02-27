@@ -55,6 +55,7 @@ async function fetchKeywordStats(keywords: string[]): Promise<KwData[]> {
       "X-Customer": config.naverSearchAd.customerId,
       "X-Signature": sig,
     },
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!res.ok) {

@@ -2,7 +2,7 @@ import { getDb } from "../db/init";
 
 async function fetchSuggestions(query: string): Promise<string[]> {
   const url = `https://ac.search.naver.com/nx/ac?q=${encodeURIComponent(query)}&con=1&frm=nv&ans=2&r_format=json&r_enc=UTF-8&t_koreng=1&st=100&q_option=0`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new Error(`Suggest API ${res.status}`);
 
   const data = await res.json() as { items: string[][][] };
