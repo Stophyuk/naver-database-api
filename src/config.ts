@@ -6,6 +6,15 @@ export const config = {
     clientId: process.env.NAVER_CLIENT_ID || "",
     clientSecret: process.env.NAVER_CLIENT_SECRET || "",
   },
+  naverSearchAd: {
+    license: process.env.NAVER_SEARCH_AD_LICENSE || "",
+    secret: process.env.NAVER_SEARCH_AD_SECRET || "",
+    customerId: process.env.NAVER_SEARCH_AD_CUSTOMER_ID || "",
+  },
+  google: {
+    apiKey: process.env.GOOGLE_CUSTOM_SEARCH_API_KEY || "",
+    cx: process.env.GOOGLE_CUSTOM_SEARCH_CX || "",
+  },
   port: parseInt(process.env.PORT || "3100"),
   collectCron: process.env.COLLECT_CRON || "0 */12 * * *",
   dbPath: process.env.DB_PATH || "./data/naver-datalab.db",

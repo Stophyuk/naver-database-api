@@ -132,4 +132,153 @@ router.get("/trends/shopping", (req, res) => {
   res.json(rows);
 });
 
+// ── Viewtory 확장 엔드포인트 ──
+
+// 실시간 검색어 (최신)
+router.get("/realtime", (req, res) => {
+  const db = getDb();
+  const source = req.query.source as string;
+  const limit = parseInt(req.query.limit as string) || 50;
+
+  let sql = `SELECT * FROM realtime_rankings WHERE collected_at = (SELECT MAX(collected_at) FROM realtime_rankings`;
+  const params: any[] = [];
+
+  if (source) {
+    sql += ` WHERE source = ?`;
+    params.push(source);
+  }
+  sql += `)`;
+  if (source) {
+    sql += ` AND source = ?`;
+    params.push(source);
+  }
+  sql += ` ORDER BY rank ASC LIMIT ?`;
+  params.push(limit);
+
+  const rows = db.prepare(sql).all(...params);
+  db.close();
+  res.json(rows);
+});
+
+// 실시간 키워드 이력
+router.get("/realtime/history", (req, res) => {
+  const db = getDb();
+  const keyword = req.query.keyword as string;
+  const limit = parseInt(req.query.limit as string) || 100;
+
+  if (!keyword) {
+    db.close();
+    return res.status(400).json({ error: "keyword 필수" });
+  }
+
+  const rows = db.prepare(
+    `SELECT * FROM realtime_rankings WHERE keyword = ? ORDER BY collected_at DESC LIMIT ?`
+  ).all(keyword, limit);
+  db.close();
+  res.json(rows);
+});
+
+// 키워드 통계
+router.get("/keyword-stats", (req, res) => {
+  const db = getDb();
+  const keyword = req.query.keyword as string;
+
+  if (!keyword) {
+    db.close();
+    return res.status(400).json({ error: "keyword 필수" });
+  }
+
+  const rows = db.prepare(
+    `SELECT * FROM keyword_stats WHERE keyword = ? ORDER BY collected_at DESC LIMIT 10`
+  ).all(keyword);
+  db.close();
+  res.json(rows);
+});
+
+// 연관 키워드
+router.get("/related-keywords", (req, res) => {
+  const db = getDb();
+  const keyword = req.query.keyword as string;
+
+  if (!keyword) {
+    db.close();
+    return res.status(400).json({ error: "keyword 필수" });
+  }
+
+  const rows = db.prepare(
+    `SELECT * FROM related_keywords WHERE seed_keyword = ? ORDER BY collected_at DESC LIMIT 50`
+  ).all(keyword);
+  db.close();
+  res.json(rows);
+});
+
+// 자동완성
+router.get("/suggestions", (req, res) => {
+  const db = getDb();
+  const keyword = req.query.keyword as string;
+
+  if (!keyword) {
+    db.close();
+    return res.status(400).json({ error: "keyword 필수" });
+  }
+
+  const rows = db.prepare(
+    `SELECT * FROM naver_suggestions WHERE seed_keyword = ? ORDER BY collected_at DESC, rank ASC LIMIT 50`
+  ).all(keyword);
+  db.close();
+  res.json(rows);
+});
+
+// 네이버 검색결과수
+router.get("/search-volume", (req, res) => {
+  const db = getDb();
+  const keyword = req.query.keyword as string;
+  const type = req.query.type as string;
+
+  if (!keyword) {
+    db.close();
+    return res.status(400).json({ error: "keyword 필수" });
+  }
+
+  let sql = `SELECT * FROM naver_search_volume WHERE keyword = ?`;
+  const params: any[] = [keyword];
+  if (type) {
+    sql += ` AND search_type = ?`;
+    params.push(type);
+  }
+  sql += ` ORDER BY collected_at DESC LIMIT 50`;
+
+  const rows = db.prepare(sql).all(...params);
+  db.close();
+  res.json(rows);
+});
+
+// 구글 검색결과수
+router.get("/google-stats", (req, res) => {
+  const db = getDb();
+  const keyword = req.query.keyword as string;
+
+  if (!keyword) {
+    db.close();
+    return res.status(400).json({ error: "keyword 필수" });
+  }
+
+  const rows = db.prepare(
+    `SELECT * FROM google_search_stats WHERE keyword = ? ORDER BY collected_at DESC LIMIT 50`
+  ).all(keyword);
+  db.close();
+  res.json(rows);
+});
+
+// 수집 로그
+router.get("/collection-logs", (req, res) => {
+  const db = getDb();
+  const limit = parseInt(req.query.limit as string) || 50;
+  const rows = db.prepare(
+    `SELECT * FROM collection_logs ORDER BY id DESC LIMIT ?`
+  ).all(limit);
+  db.close();
+  res.json(rows);
+});
+
 export default router;

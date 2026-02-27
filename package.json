@@ -10,20 +10,26 @@
     "collect": "tsx src/collect.ts",
     "collect:search": "tsx src/collectors/search-trend.ts",
     "collect:shopping": "tsx src/collectors/shopping-insight.ts",
+    "collect:signal": "tsx src/collectors/signal-realtime.ts",
+    "collect:searchad": "tsx src/collectors/naver-searchad.ts",
+    "collect:suggest": "tsx src/collectors/naver-suggest.ts",
+    "collect:volume": "tsx src/collectors/naver-search-volume.ts",
+    "collect:google": "tsx src/collectors/google-search.ts",
     "db:init": "tsx src/db/init.ts",
     "lint": "eslint src/"
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0",
+    "cheerio": "^1.2.0",
     "croner": "^9.0.0",
     "dotenv": "^16.4.0",
     "express": "^4.21.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.0",
-    "@types/express": "^4.17.0",
-    "@types/node": "^22.0.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^4.17.25",
+    "@types/node": "^22.19.13",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }

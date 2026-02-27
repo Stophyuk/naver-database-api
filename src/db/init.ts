@@ -117,6 +117,104 @@ export function initDb() {
     CREATE INDEX IF NOT EXISTS idx_shopping_kw_period ON shopping_keyword_trends(keyword, period);
   `);
 
+  // ── Viewtory 확장 테이블 ──
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS realtime_rankings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL,
+      keyword TEXT NOT NULL,
+      rank INTEGER NOT NULL,
+      category TEXT,
+      metadata TEXT,
+      collected_at TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_realtime_source_date ON realtime_rankings(source, collected_at);
+    CREATE INDEX IF NOT EXISTS idx_realtime_keyword ON realtime_rankings(keyword, collected_at);
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS keyword_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      keyword TEXT NOT NULL,
+      monthly_pc_cnt INTEGER,
+      monthly_mobile_cnt INTEGER,
+      monthly_pc_clk REAL,
+      monthly_mobile_clk REAL,
+      monthly_pc_ctr REAL,
+      monthly_mobile_ctr REAL,
+      pl_avg_depth REAL,
+      comp_idx TEXT,
+      collected_at TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_kwstats_keyword ON keyword_stats(keyword, collected_at);
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS related_keywords (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      seed_keyword TEXT NOT NULL,
+      related_keyword TEXT NOT NULL,
+      monthly_pc_cnt INTEGER,
+      monthly_mobile_cnt INTEGER,
+      comp_idx TEXT,
+      collected_at TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_relkw_seed ON related_keywords(seed_keyword, collected_at);
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS naver_suggestions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      seed_keyword TEXT NOT NULL,
+      suggestion TEXT NOT NULL,
+      rank INTEGER,
+      collected_at TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_suggest_seed ON naver_suggestions(seed_keyword, collected_at);
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS google_search_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      keyword TEXT NOT NULL,
+      total_results BIGINT,
+      collected_at TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_google_keyword ON google_search_stats(keyword, collected_at);
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS naver_search_volume (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      keyword TEXT NOT NULL,
+      search_type TEXT NOT NULL,
+      total_results INTEGER,
+      collected_at TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_naver_vol_keyword ON naver_search_volume(keyword, search_type, collected_at);
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS collection_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      api_calls INTEGER DEFAULT 0,
+      rows_inserted INTEGER DEFAULT 0,
+      error_message TEXT,
+      duration_ms INTEGER,
+      started_at TEXT NOT NULL,
+      completed_at TEXT
+    );
+  `);
+
   console.log("✅ DB 초기화 완료:", config.dbPath);
   db.close();
 }
