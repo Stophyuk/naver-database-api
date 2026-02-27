@@ -45,7 +45,13 @@ async function runCollection() {
   initDb();
   const db = getDb();
 
-  const keywords = db.prepare(
+  // 데이터랩 트렌드: 기존 키워드만 (source != 'expanded')
+  const originalKeywords = db.prepare(
+    "SELECT keyword_group, keywords FROM tracked_keywords WHERE active = 1 AND (source IS NULL OR source != 'expanded')"
+  ).all() as { keyword_group: string; keywords: string }[];
+
+  // 전체 키워드 (기존 + 확장) — 검색결과수, 자동완성, 검색광고용
+  const allKeywords = db.prepare(
     "SELECT keyword_group, keywords FROM tracked_keywords WHERE active = 1"
   ).all() as { keyword_group: string; keywords: string }[];
 
@@ -55,13 +61,13 @@ async function runCollection() {
 
   db.close();
 
-  // 1. 기존: 검색어 트렌드
-  if (keywords.length > 0) {
-    const keywordGroups = keywords.map((k) => ({
+  // 1. 데이터랩 검색어 트렌드 — 기존 키워드만 (확장 제외)
+  if (originalKeywords.length > 0) {
+    const keywordGroups = originalKeywords.map((k) => ({
       groupName: k.keyword_group,
       keywords: JSON.parse(k.keywords) as string[],
     }));
-    console.log(`\n📊 검색어 트렌드 수집 (${keywordGroups.length}개 그룹)`);
+    console.log(`\n📊 검색어 트렌드 수집 (기존 ${keywordGroups.length}개 그룹만, 확장 제외)`);
     const fullCombo = keywordGroups.length <= 3;
     await collectSearchTrends(keywordGroups, { fullCombination: fullCombo });
   }
@@ -77,13 +83,16 @@ async function runCollection() {
   console.log("\n📡 Signal.bz 실시간 수집");
   await logCollection("signal-realtime", collectSignalRealtime);
 
-  console.log("\n🔍 SearchAd 키워드 통계 수집");
+  // 검색광고: 전체 키워드 포함 (배치 5개씩이라 효율적)
+  console.log(`\n🔍 SearchAd 키워드 통계 수집 (전체 ${allKeywords.length}개 그룹)`);
   await logCollection("naver-searchad", collectNaverSearchAd);
 
-  console.log("\n💡 네이버 자동완성 수집");
+  // 자동완성: 전체 키워드
+  console.log(`\n💡 네이버 자동완성 수집 (전체 ${allKeywords.length}개 그룹)`);
   await logCollection("naver-suggest", collectNaverSuggest);
 
-  console.log("\n📊 네이버 검색결과수 수집");
+  // 검색결과수: 전체 키워드
+  console.log(`\n📊 네이버 검색결과수 수집 (전체 ${allKeywords.length}개 그룹)`);
   await logCollection("naver-search-volume", collectNaverSearchVolume);
 
   // Google CSE — 비활성화 (403 이슈, 나중에 해결 후 활성화)
@@ -91,6 +100,36 @@ async function runCollection() {
   // await logCollection("google-search", collectGoogleSearch);
 
   console.log("\n✅ 전체 수집 완료:", new Date().toISOString());
+
+  // 수집 후 분석 실행
+  console.log("\n🔬 분석 시작...");
+  try {
+    const { analyzeOpportunity } = await import("./analysis/opportunity");
+    const initDbModule = await import("./db/init");
+
+    // analysis_results 테이블 확보
+    const analysisDb = initDbModule.getDb();
+    analysisDb.exec(`
+      CREATE TABLE IF NOT EXISTS analysis_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        keyword TEXT NOT NULL,
+        analysis_type TEXT NOT NULL,
+        score REAL,
+        data TEXT,
+        analyzed_at TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_analysis_type ON analysis_results(analysis_type, analyzed_at);
+      CREATE INDEX IF NOT EXISTS idx_analysis_keyword ON analysis_results(keyword, analysis_type);
+    `);
+    analysisDb.prepare(`DELETE FROM analysis_results WHERE analyzed_at < datetime('now', '-7 days')`).run();
+    analysisDb.close();
+
+    const results = await analyzeOpportunity();
+    console.log(`🔬 분석 완료: ${results.length}개 키워드`);
+  } catch (err) {
+    console.error("⚠️ 분석 실패 (수집은 완료):", err);
+  }
 }
 
 runCollection().catch((err) => {

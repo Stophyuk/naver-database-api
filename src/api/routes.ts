@@ -281,4 +281,115 @@ router.get("/collection-logs", (req, res) => {
   res.json(rows);
 });
 
+// ── 분석 엔드포인트 ──
+
+// 블루오션 키워드 순위
+router.get("/blue-ocean", (req, res) => {
+  const db = getDb();
+  const limit = parseInt(req.query.limit as string) || 50;
+
+  try {
+    const rows = db.prepare(`
+      SELECT keyword, score, data FROM analysis_results
+      WHERE analysis_type = 'blue_ocean'
+        AND analyzed_at = (SELECT MAX(analyzed_at) FROM analysis_results WHERE analysis_type = 'blue_ocean')
+      ORDER BY score DESC
+      LIMIT ?
+    `).all(limit);
+    db.close();
+    res.json(rows.map((r: any) => ({ ...JSON.parse(r.data), score: r.score })));
+  } catch {
+    db.close();
+    res.json([]);
+  }
+});
+
+// 급상승/급하락 키워드
+router.get("/trending", (req, res) => {
+  const db = getDb();
+  const days = parseInt(req.query.days as string) || 7;
+
+  try {
+    const rows = db.prepare(`
+      SELECT keyword, score, data FROM analysis_results
+      WHERE analysis_type = 'trending'
+        AND analyzed_at = (SELECT MAX(analyzed_at) FROM analysis_results WHERE analysis_type = 'trending')
+      ORDER BY ABS(score - 1) DESC
+    `).all();
+    db.close();
+    res.json(rows.map((r: any) => ({ ...JSON.parse(r.data), score: r.score })));
+  } catch {
+    db.close();
+    res.json([]);
+  }
+});
+
+// 종합 기회 점수
+router.get("/opportunity", (req, res) => {
+  const db = getDb();
+  const limit = parseInt(req.query.limit as string) || 50;
+
+  try {
+    const rows = db.prepare(`
+      SELECT keyword, score, data FROM analysis_results
+      WHERE analysis_type = 'opportunity'
+        AND analyzed_at = (SELECT MAX(analyzed_at) FROM analysis_results WHERE analysis_type = 'opportunity')
+      ORDER BY score DESC
+      LIMIT ?
+    `).all(limit);
+    db.close();
+    res.json(rows.map((r: any) => ({ ...JSON.parse(r.data), score: r.score })));
+  } catch {
+    db.close();
+    res.json([]);
+  }
+});
+
+// DB 통계
+router.get("/stats", (req, res) => {
+  const db = getDb();
+  const tables = [
+    "tracked_keywords", "tracked_categories", "search_trends",
+    "shopping_category_trends", "shopping_keyword_trends",
+    "realtime_rankings", "keyword_stats", "related_keywords",
+    "naver_suggestions", "naver_search_volume", "google_search_stats",
+    "collection_logs", "analysis_results",
+  ];
+
+  const stats: Record<string, number> = {};
+  for (const t of tables) {
+    try {
+      const row = db.prepare(`SELECT COUNT(*) as cnt FROM ${t}`).get() as any;
+      stats[t] = row.cnt;
+    } catch {
+      stats[t] = -1;
+    }
+  }
+
+  // DB 파일 크기
+  const fs = require("fs");
+  const { config } = require("../config");
+  let dbSizeBytes = 0;
+  try {
+    dbSizeBytes = fs.statSync(config.dbPath).size;
+  } catch {}
+
+  const expandedGroups = db.prepare(
+    "SELECT COUNT(*) as cnt FROM tracked_keywords WHERE source = 'expanded' AND active = 1"
+  ).get() as any;
+  const originalGroups = db.prepare(
+    "SELECT COUNT(*) as cnt FROM tracked_keywords WHERE (source IS NULL OR source != 'expanded') AND active = 1"
+  ).get() as any;
+
+  db.close();
+  res.json({
+    tables: stats,
+    dbSizeMB: Math.round(dbSizeBytes / 1024 / 1024 * 100) / 100,
+    keywordGroups: {
+      original: originalGroups?.cnt || 0,
+      expanded: expandedGroups?.cnt || 0,
+    },
+  });
+});
+
 export default router;

@@ -215,6 +215,21 @@ export function initDb() {
     );
   `);
 
+  // 분석 결과 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS analysis_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      keyword TEXT NOT NULL,
+      analysis_type TEXT NOT NULL,
+      score REAL,
+      data TEXT,
+      analyzed_at TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_analysis_type ON analysis_results(analysis_type, analyzed_at);
+    CREATE INDEX IF NOT EXISTS idx_analysis_keyword ON analysis_results(keyword, analysis_type);
+  `);
+
   console.log("✅ DB 초기화 완료:", config.dbPath);
   db.close();
 }
