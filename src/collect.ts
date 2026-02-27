@@ -90,17 +90,23 @@ async function runCollection() {
   console.log("\n📡 Signal.bz 실시간 수집");
   await logCollection("signal-realtime", collectSignalRealtime);
 
-  // 검색광고: 전체 키워드 (5분 타임아웃)
-  console.log(`\n🔍 SearchAd 키워드 통계 수집 (전체 ${allKeywords.length}개 그룹)`);
-  await logCollection("naver-searchad", withTimeout(collectNaverSearchAd, 300000, "SearchAd"));
+  // 검색광고: 원본 키워드만 (API 한도 보호, 5분 타임아웃)
+  console.log(`\n🔍 SearchAd 키워드 통계 수집 (원본 ${originalKeywords.length}개 그룹만)`);
+  await logCollection("naver-searchad", withTimeout(() => collectNaverSearchAd({ onlyOriginal: true }), 300000, "SearchAd"));
 
-  // 자동완성: 전체 키워드 (10분 타임아웃)
-  console.log(`\n💡 네이버 자동완성 수집 (전체 ${allKeywords.length}개 그룹)`);
-  await logCollection("naver-suggest", withTimeout(collectNaverSuggest, 600000, "Suggest"));
+  // 자동완성: 원본 키워드만 (5분 타임아웃)
+  console.log(`\n💡 네이버 자동완성 수집 (원본 ${originalKeywords.length}개 그룹만)`);
+  await logCollection("naver-suggest", withTimeout(() => collectNaverSuggest({ onlyOriginal: true }), 300000, "Suggest"));
 
-  // 검색결과수: 전체 키워드 (30분 타임아웃)
-  console.log(`\n📊 네이버 검색결과수 수집 (전체 ${allKeywords.length}개 그룹)`);
-  await logCollection("naver-search-volume", withTimeout(collectNaverSearchVolume, 1800000, "SearchVolume"));
+  // 검색결과수: 원본 키워드만 + 하루 1회 (06:00 KST 실행분만)
+  const kstHour = new Date(Date.now() + 9 * 3600000).getUTCHours();
+  if (kstHour < 6) {
+    // 00:00 KST 실행: 검색결과수 수집 (Naver API 예산 보호)
+    console.log(`\n📊 네이버 검색결과수 수집 (원본 ${originalKeywords.length}개 그룹만, 1일1회)`);
+    await logCollection("naver-search-volume", withTimeout(() => collectNaverSearchVolume({ onlyOriginal: true }), 600000, "SearchVolume"));
+  } else {
+    console.log(`\n⏭️ 네이버 검색결과수 — 00:00 KST에만 실행 (API 예산 보호)`);
+  }
 
   // Google CSE — 비활성화 (403 이슈, 나중에 해결 후 활성화)
   // console.log("\n🌐 Google CSE 수집");

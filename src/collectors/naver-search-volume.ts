@@ -17,11 +17,12 @@ async function fetchSearchTotal(keyword: string, type: string): Promise<number> 
   return data.total || 0;
 }
 
-export async function collectNaverSearchVolume(): Promise<{ apiCalls: number; rowsInserted: number }> {
+export async function collectNaverSearchVolume(opts?: { onlyOriginal?: boolean }): Promise<{ apiCalls: number; rowsInserted: number }> {
   const db = getDb();
-  const trackedRows = db.prepare(
-    "SELECT keyword_group, keywords FROM tracked_keywords WHERE active = 1"
-  ).all() as { keyword_group: string; keywords: string }[];
+  const query = opts?.onlyOriginal
+    ? "SELECT keyword_group, keywords FROM tracked_keywords WHERE active = 1 AND (source IS NULL OR source != 'expanded')"
+    : "SELECT keyword_group, keywords FROM tracked_keywords WHERE active = 1";
+  const trackedRows = db.prepare(query).all() as { keyword_group: string; keywords: string }[];
 
   const allKeywords: string[] = [];
   for (const row of trackedRows) {
