@@ -112,6 +112,15 @@ async function runCollection() {
   // console.log("\n🌐 Google CSE 수집");
   // await logCollection("google-search", collectGoogleSearch);
 
+  // Demographics: 00:00 KST에만 실행 (1일1회, 원본 키워드만)
+  if (kstHour < 6) {
+    console.log(`\n👥 Demographics 수집 (원본 키워드, 1일1회)`);
+    const { collectDemographics } = await import("./collectors/demographics");
+    await logCollection("demographics", collectDemographics);
+  } else {
+    console.log(`\n⏭️ Demographics — 00:00 KST에만 실행`);
+  }
+
   console.log("\n✅ 전체 수집 완료:", new Date().toISOString());
 
   // 수집 후 분석 실행
@@ -140,6 +149,11 @@ async function runCollection() {
 
     const results = await analyzeOpportunity();
     console.log(`🔬 분석 완료: ${results.length}개 키워드`);
+
+    // Verdict 생성
+    const { generateVerdicts } = await import("./analysis/verdict");
+    const verdicts = await generateVerdicts();
+    console.log(`⚖️ Verdict 완료: ${verdicts.length}개 키워드`);
   } catch (err) {
     console.error("⚠️ 분석 실패 (수집은 완료):", err);
   }

@@ -93,10 +93,16 @@ export function initDb() {
       keyword_group TEXT NOT NULL,
       keywords TEXT NOT NULL,
       category TEXT DEFAULT 'general',
+      source TEXT,
       active INTEGER DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+
+  // source 컬럼 없으면 추가 (기존 DB 호환)
+  try {
+    db.exec(`ALTER TABLE tracked_keywords ADD COLUMN source TEXT`);
+  } catch { /* already exists */ }
 
   // 쇼핑 카테고리 관리
   db.exec(`
@@ -228,6 +234,22 @@ export function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_analysis_type ON analysis_results(analysis_type, analyzed_at);
     CREATE INDEX IF NOT EXISTS idx_analysis_keyword ON analysis_results(keyword, analysis_type);
+  `);
+
+  // Demographics 테이블
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS keyword_demographics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      keyword TEXT NOT NULL,
+      gender_male REAL,
+      gender_female REAL,
+      age_group TEXT,
+      age_percentage REAL,
+      best_day TEXT,
+      day_ratios TEXT,
+      collected_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_demo_keyword ON keyword_demographics(keyword, collected_at);
   `);
 
   console.log("✅ DB 초기화 완료:", config.dbPath);

@@ -345,6 +345,214 @@ router.get("/opportunity", (req, res) => {
   }
 });
 
+// ── 통합 분석 엔드포인트 ──
+router.get("/keyword-analysis/:keyword", (req, res) => {
+  const db = getDb();
+  const keyword = req.params.keyword;
+
+  try {
+    // 1. keyword_stats 최신
+    const stats = db.prepare(
+      `SELECT * FROM keyword_stats WHERE keyword = ? ORDER BY collected_at DESC LIMIT 1`
+    ).get(keyword) as any;
+
+    if (!stats) {
+      db.close();
+      return res.json({ keyword, cached: false, message: "데이터 없음" });
+    }
+
+    // 2. search_trends 최근 12주
+    const trendRows = db.prepare(
+      `SELECT period, ratio FROM search_trends
+       WHERE keyword_group = ? AND time_unit = 'week'
+       ORDER BY period DESC LIMIT 12`
+    ).all(keyword) as any[];
+
+    let trend: any = null;
+    if (trendRows.length >= 8) {
+      const recent4 = trendRows.slice(0, 4);
+      const prev4 = trendRows.slice(4, 8);
+      const recentAvg = recent4.reduce((s: number, r: any) => s + r.ratio, 0) / 4;
+      const prevAvg = prev4.reduce((s: number, r: any) => s + r.ratio, 0) / 4;
+      const changePct = prevAvg > 0 ? Math.round(((recentAvg - prevAvg) / prevAvg) * 1000) / 10 : 0;
+      trend = {
+        direction: changePct >= 10 ? "rising" : changePct <= -10 ? "falling" : "stable",
+        recentWeekAvg: Math.round(recentAvg * 100) / 100,
+        previousWeekAvg: Math.round(prevAvg * 100) / 100,
+        changePercent: changePct,
+        weeklyData: trendRows.reverse().map((r: any) => ({ period: r.period, ratio: r.ratio })),
+      };
+    }
+
+    // 3. saturation from naver_search_volume
+    const volRows = db.prepare(
+      `SELECT search_type, total_results FROM naver_search_volume
+       WHERE keyword = ? AND id IN (
+         SELECT MAX(id) FROM naver_search_volume WHERE keyword = ? GROUP BY search_type
+       )`
+    ).all(keyword, keyword) as any[];
+    const saturation: any = {};
+    const typeMap: Record<string, string> = { blog: "blogTotal", news: "newsTotal", shop: "shopTotal", cafearticle: "cafeTotal", kin: "kinTotal" };
+    for (const v of volRows) {
+      const key = typeMap[v.search_type];
+      if (key) saturation[key] = v.total_results;
+    }
+
+    // 4. suggestions
+    const sugRows = db.prepare(
+      `SELECT suggestion FROM naver_suggestions
+       WHERE seed_keyword = ? AND collected_at = (
+         SELECT MAX(collected_at) FROM naver_suggestions WHERE seed_keyword = ?
+       ) ORDER BY rank ASC`
+    ).all(keyword, keyword) as any[];
+    const suggestions = sugRows.map((r: any) => r.suggestion);
+
+    // 5. related keywords top 20
+    const relRows = db.prepare(
+      `SELECT related_keyword, monthly_pc_cnt, monthly_mobile_cnt, comp_idx
+       FROM related_keywords
+       WHERE seed_keyword = ? AND collected_at = (
+         SELECT MAX(collected_at) FROM related_keywords WHERE seed_keyword = ?
+       )
+       ORDER BY (COALESCE(monthly_pc_cnt,0) + COALESCE(monthly_mobile_cnt,0)) DESC
+       LIMIT 20`
+    ).all(keyword, keyword) as any[];
+    const relatedKeywords = relRows.map((r: any) => ({
+      keyword: r.related_keyword,
+      monthlyPcCnt: r.monthly_pc_cnt,
+      monthlyMobileCnt: r.monthly_mobile_cnt,
+      compIdx: r.comp_idx,
+    }));
+
+    // 6. analysis_results
+    const analysisTypes = ["blue_ocean", "opportunity", "trending"];
+    const analysis: any = {};
+    for (const aType of analysisTypes) {
+      const row = db.prepare(
+        `SELECT score, data FROM analysis_results
+         WHERE keyword = ? AND analysis_type = ?
+         ORDER BY analyzed_at DESC LIMIT 1`
+      ).get(keyword, aType) as any;
+      if (row) {
+        const d = JSON.parse(row.data);
+        if (aType === "blue_ocean") analysis.blueOceanScore = row.score;
+        else if (aType === "opportunity") analysis.opportunityScore = row.score;
+        else if (aType === "trending") {
+          analysis.trending = { direction: d.direction, changeRatio: d.changeRate };
+        }
+      }
+    }
+
+    db.close();
+    res.json({
+      keyword,
+      cached: true,
+      stats: {
+        monthlyPcCnt: stats.monthly_pc_cnt,
+        monthlyMobileCnt: stats.monthly_mobile_cnt,
+        monthlyPcClk: stats.monthly_pc_clk,
+        monthlyMobileClk: stats.monthly_mobile_clk,
+        pcCtr: stats.monthly_pc_ctr,
+        mobileCtr: stats.monthly_mobile_ctr,
+        compIdx: stats.comp_idx,
+        plAvgDepth: stats.pl_avg_depth,
+        collectedAt: stats.collected_at,
+      },
+      trend,
+      saturation,
+      suggestions,
+      relatedKeywords,
+      analysis,
+      updatedAt: stats.collected_at,
+    });
+  } catch (err: any) {
+    db.close();
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 키워드 요청 (Viewtory 연동)
+router.post("/keyword-request", (req, res) => {
+  const { keywords } = req.body;
+  if (!keywords?.length) {
+    return res.status(400).json({ error: "keywords 배열 필수" });
+  }
+
+  const db = getDb();
+  try {
+    const allTracked = db.prepare(
+      "SELECT keyword_group, keywords FROM tracked_keywords WHERE active = 1"
+    ).all() as any[];
+
+    // 이미 추적 중인 키워드 set
+    const trackedSet = new Set<string>();
+    for (const row of allTracked) {
+      const kws = JSON.parse(row.keywords) as string[];
+      for (const k of kws) trackedSet.add(k);
+    }
+
+    const registered: string[] = [];
+    const alreadyTracked: string[] = [];
+
+    for (const kw of keywords as string[]) {
+      if (trackedSet.has(kw)) {
+        alreadyTracked.push(kw);
+      } else {
+        db.prepare(
+          "INSERT INTO tracked_keywords (keyword_group, keywords, category, source) VALUES (?, ?, 'viewtory', 'viewtory_request')"
+        ).run(kw, JSON.stringify([kw]));
+        registered.push(kw);
+        trackedSet.add(kw);
+      }
+    }
+
+    // 다음 수집 시간 계산 (12시간 간격, 00:00/12:00 KST)
+    const now = new Date();
+    const kstNow = new Date(now.getTime() + 9 * 3600000);
+    const kstHour = kstNow.getUTCHours();
+    const nextHour = kstHour < 12 ? 12 : 24;
+    const hoursUntil = nextHour - kstHour;
+    const nextCollection = new Date(now.getTime() + hoursUntil * 3600000);
+    nextCollection.setMinutes(0, 0, 0);
+
+    db.close();
+    res.json({
+      registered,
+      alreadyTracked,
+      nextCollection: nextCollection.toISOString(),
+    });
+  } catch (err: any) {
+    db.close();
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Verdict 엔드포인트
+router.get("/keyword-verdict/:keyword", (req, res) => {
+  const db = getDb();
+  const keyword = req.params.keyword;
+
+  try {
+    const row = db.prepare(
+      `SELECT data FROM analysis_results
+       WHERE keyword = ? AND analysis_type = 'verdict'
+       ORDER BY analyzed_at DESC LIMIT 1`
+    ).get(keyword) as any;
+
+    db.close();
+
+    if (!row) {
+      return res.json({ keyword, verdict: null, message: "verdict 데이터 없음" });
+    }
+
+    const verdict = JSON.parse(row.data);
+    res.json(verdict);
+  } catch (err: any) {
+    db.close();
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DB 통계
 router.get("/stats", (req, res) => {
   const db = getDb();
@@ -353,7 +561,7 @@ router.get("/stats", (req, res) => {
     "shopping_category_trends", "shopping_keyword_trends",
     "realtime_rankings", "keyword_stats", "related_keywords",
     "naver_suggestions", "naver_search_volume", "google_search_stats",
-    "collection_logs", "analysis_results",
+    "collection_logs", "analysis_results", "keyword_demographics",
   ];
 
   const stats: Record<string, number> = {};
