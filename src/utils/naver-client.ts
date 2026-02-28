@@ -29,6 +29,7 @@ export async function callNaverAPI(url: string, body: object): Promise<any> {
       "X-Naver-Client-Secret": config.naver.clientSecret,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
   });
 
   dailyCallCount++;

@@ -125,21 +125,28 @@ export async function collectDemographics(): Promise<{ apiCalls: number; rowsIns
       for (const kw of chunk) ageResults.set(kw, []);
 
       for (const age of ageGroups) {
-        const data = await callNaverAPI(DATALAB_SEARCH_URL, {
-          startDate,
-          endDate,
-          timeUnit: "month",
-          keywordGroups: keywordGroups.map(g => ({ groupName: g.groupName, keywords: g.keywords })),
-          ages: [age],
-        });
-        apiCalls++;
+        try {
+          const data = await callNaverAPI(DATALAB_SEARCH_URL, {
+            startDate,
+            endDate,
+            timeUnit: "month",
+            keywordGroups: keywordGroups.map(g => ({ groupName: g.groupName, keywords: g.keywords })),
+            ages: [age],
+          });
+          apiCalls++;
 
-        for (const kw of chunk) {
-          const result = data?.results?.find((r: any) => r.title === kw);
-          const avg = result?.data?.length
-            ? result.data.reduce((s: number, d: any) => s + d.ratio, 0) / result.data.length
-            : 0;
-          ageResults.get(kw)!.push({ age: ageLabels[age], avg });
+          for (const kw of chunk) {
+            const result = data?.results?.find((r: any) => r.title === kw);
+            const avg = result?.data?.length
+              ? result.data.reduce((s: number, d: any) => s + d.ratio, 0) / result.data.length
+              : 0;
+            ageResults.get(kw)!.push({ age: ageLabels[age], avg });
+          }
+        } catch (ageErr) {
+          console.error(`⚠️ Demographics 연령(${ageLabels[age]}) 실패:`, (ageErr as Error).message);
+          for (const kw of chunk) {
+            ageResults.get(kw)!.push({ age: ageLabels[age], avg: 0 });
+          }
         }
       }
 
